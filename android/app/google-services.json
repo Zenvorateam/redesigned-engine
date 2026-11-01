@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "915356905336",
+    "project_id": "zenvora-ea8f3",
+    "storage_bucket": "zenvora-ea8f3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:915356905336:android:ba983ed1ca6e82bb9ae28d",
+        "android_client_info": {
+          "package_name": "com.shrivagar.zenvora"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCDM1fa_gCNLsNqBWjIgGpaB1us65H7hl8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
