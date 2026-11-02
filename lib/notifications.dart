@@ -22,21 +22,23 @@ class PushNotifications {
         sound: true,
       );
 
-      final token = await messaging.getToken();
-      _currentToken = token;
+      _currentToken = await messaging.getToken();
 
-      print('FCM TOKEN: $token');
+      print('FCM TOKEN: $_currentToken');
 
-      await registerCurrentDevice();
+      final error = await registerCurrentDevice();
+      print('DEVICE TOKEN SAVE RESULT: ${error ?? "SUCCESS"}');
 
-      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      FirebaseMessaging.onMessage.listen((message) {
         print('Notification received: ${message.notification?.title}');
       });
 
       FirebaseMessaging.instance.onTokenRefresh.listen((token) async {
         _currentToken = token;
         print('FCM TOKEN REFRESHED: $token');
-        await registerCurrentDevice();
+
+        final refreshError = await registerCurrentDevice();
+        print('DEVICE TOKEN SAVE RESULT: ${refreshError ?? "SUCCESS"}');
       });
 
       _ready = true;
@@ -45,14 +47,18 @@ class PushNotifications {
     }
   }
 
-  static Future<void> registerCurrentDevice() async {
+  static Future<String?> registerCurrentDevice() async {
     final token = _currentToken;
 
-    if (token == null || token.isEmpty || !AppConfig.supabaseReady) {
-      return;
+    if (token == null || token.isEmpty) {
+      return 'FCM token is null or empty';
     }
 
-    await Cloud.insert(
+    if (!AppConfig.supabaseReady) {
+      return 'Supabase is not configured';
+    }
+
+    return Cloud.insert(
       'device_tokens',
       {
         'token': token,
