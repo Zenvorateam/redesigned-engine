@@ -8,6 +8,7 @@ import 'cart.dart';
 import 'account.dart';
 import 'widgets.dart';
 import 'notifications.dart';
+import 'auth.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -109,7 +110,11 @@ class _SplashScreenState extends State<SplashScreen> {
   void initState() {
     super.initState();
     Timer(const Duration(milliseconds: 1500), () {
-      if (mounted) Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const MainShell()));
+      if (!mounted) return;
+      final store = StoreScope.read(context);
+      Navigator.of(context).pushReplacement(MaterialPageRoute(
+        builder: (_) => store.needsLogin ? const StartupLoginGate() : const MainShell(),
+      ));
     });
   }
 
@@ -129,6 +134,45 @@ class _SplashScreenState extends State<SplashScreen> {
       ),
     );
   }
+}
+
+class StartupLoginGate extends StatefulWidget {
+  const StartupLoginGate({super.key});
+  @override
+  State<StartupLoginGate> createState() => _StartupLoginGateState();
+}
+
+class _StartupLoginGateState extends State<StartupLoginGate> {
+  bool _opening = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _requireLogin());
+  }
+
+  Future<void> _requireLogin() async {
+    if (_opening || !mounted) return;
+    _opening = true;
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const AuthScreen()),
+    );
+    _opening = false;
+    if (!mounted) return;
+    if (result == true) {
+      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const MainShell()));
+    } else {
+      // Login is required to enter the shopping experience; do not silently bypass it.
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      if (mounted) _requireLogin();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => const Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(child: CircularProgressIndicator()),
+      );
 }
 
 class MainShell extends StatefulWidget {

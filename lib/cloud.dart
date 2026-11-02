@@ -153,4 +153,23 @@ class Cloud {
       return 'Internet check karo';
     }
   }
+  static Future<CloudResult<Map<String, dynamic>>> invokeFunction(
+      String functionName, Map<String, dynamic> body) async {
+    if (!AppConfig.supabaseReady || _token == null) {
+      return const CloudResult.fail('Please sign in before checkout');
+    }
+    try {
+      final r = await http
+          .post(_u('/functions/v1/$functionName'),
+              headers: _headers(), body: jsonEncode(body))
+          .timeout(const Duration(seconds: 30));
+      if (r.statusCode >= 300) return CloudResult.fail(_err(r));
+      final decoded = jsonDecode(r.body);
+      if (decoded is! Map) return const CloudResult.fail('Invalid server response');
+      return CloudResult.ok(Map<String, dynamic>.from(decoded));
+    } catch (_) {
+      return const CloudResult.fail('Secure checkout service is unavailable. Please try again.');
+    }
+  }
+
 }

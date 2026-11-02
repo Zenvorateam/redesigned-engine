@@ -1,0 +1,14 @@
+ZENVORA MART — EXISTING REPOSITORY OVERLAY
+
+This ZIP is intended for the existing GitHub repository. Do NOT create a new repository.
+
+1. Extract the ZIP into the root of your existing `redesigned-engine-main` repository and allow files to merge/replace.
+2. Delete the old file `lib/seed.dart` (it contains the old demo catalogue seed and is intentionally removed).
+3. Commit and push to your existing `main` branch, or run the `Build Zenvora APK` workflow manually from GitHub Actions.
+4. The APK is uploaded as the `Zenvora-Release-APK` workflow artifact.
+5. Read `BACKEND_SETUP.md` before testing cloud-backed features. Apply the base SQL first, then the migration; deploy all Edge Functions and set required secrets.
+6. For scheduled database backups, add GitHub Actions secret `SUPABASE_DB_URL`. The weekly backup workflow stores a 30-day artifact.
+
+Do not put Supabase service-role keys, Razorpay secret, Firebase private key or database password in Flutter files or commit them to GitHub.
+
+This is a test package, not a claim that live Supabase/Razorpay/FCM deployment or device testing has already happened. See `IMPLEMENTATION_STATUS.md` for current scope and known limitations.

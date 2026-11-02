@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'models.dart';
 import 'store.dart';
+import 'cloud.dart';
 import 'widgets.dart';
 import 'account.dart';
 import 'auth.dart';
@@ -16,6 +17,7 @@ class CartScreen extends StatefulWidget {
 class _CartScreenState extends State<CartScreen> {
   final code = TextEditingController();
   String couponMsg = '';
+  String? _checkoutRequestId;
 
   @override
   void dispose() {
@@ -80,30 +82,6 @@ class _CartScreenState extends State<CartScreen> {
                     );
                   }),
 
-                  // membership nudge: free + fast delivery
-                  if (!s.isMember)
-                    GestureDetector(
-                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MembershipScreen())),
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.all(13),
-                        decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), border: Border.all(color: ink, width: 1.1)),
-                        child: Row(children: [
-                          const Icon(Icons.workspace_premium_rounded, color: Color(0xFFB45309)),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              s.normalShipping > 0
-                                  ? 'Join ${AppConfig.membershipName} for ₹${AppConfig.membershipPrice}/month and get FREE, faster delivery on this order'
-                                  : 'Join ${AppConfig.membershipName} for ₹${AppConfig.membershipPrice}/month: free delivery on every order, now and later',
-                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, height: 1.35),
-                            ),
-                          ),
-                          const Icon(Icons.chevron_right),
-                        ]),
-                      ),
-                    ),
-
                   // coupon
                   Container(
                     padding: const EdgeInsets.all(14),
@@ -155,7 +133,7 @@ class _CartScreenState extends State<CartScreen> {
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
                     PriceRow(label: 'Subtotal', value: '₹${s.subtotal}'),
                     if (s.couponDiscount > 0) PriceRow(label: 'Coupon', value: '-₹${s.couponDiscount}', color: success),
-                    PriceRow(label: s.isMember && s.normalShipping > 0 ? 'Delivery (${AppConfig.membershipName})' : 'Delivery', value: s.shipping == 0 ? 'FREE' : '₹${s.shipping}', color: s.shipping == 0 ? success : null),
+                    PriceRow(label: 'Delivery', value: s.shipping == 0 ? 'FREE' : '₹${s.shipping}', color: s.shipping == 0 ? success : null),
                     if (s.shipping > 0)
                       Align(
                         alignment: Alignment.centerLeft,
@@ -325,7 +303,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             child: Column(children: [
               PriceRow(label: 'Items total', value: '₹${s.subtotal}'),
               if (s.couponDiscount > 0) PriceRow(label: 'Coupon ${s.appliedCoupon ?? ''}', value: '-₹${s.couponDiscount}', color: success),
-              PriceRow(label: s.isMember && s.normalShipping > 0 ? 'Delivery (${AppConfig.membershipName})' : 'Delivery', value: s.shipping == 0 ? 'FREE' : '₹${s.shipping}', color: s.shipping == 0 ? success : null),
+              PriceRow(label: 'Delivery', value: s.shipping == 0 ? 'FREE' : '₹${s.shipping}', color: s.shipping == 0 ? success : null),
               const Divider(),
               PriceRow(label: 'Payable amount', value: '₹${s.total}', bold: true),
             ]),
@@ -342,18 +320,38 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       return;
                     }
                     final online = payment == 'Online payment';
-                    if (online && !AppConfig.razorpayReady) {
-                      toast(context, 'Online payment is not set up yet. Please choose Cash on Delivery.');
-                      return;
-                    }
                     setState(() => busy = true);
                     await s.saveProfile(name: name.text.trim(), email: email.text.trim(), mobile: mobile.text.trim(), addr: addr.text.trim(), pin: pin.text.trim(), town: town.text.trim());
-                    var method = payment;
-                    var payId = '';
-                    if (online) {
+                    if (!AppConfig.supabaseReady || !s.isLoggedIn) {
+                      setState(() => busy = false);
+                      toast(context, 'Secure checkout is not configured. Please contact support.');
+                      return;
+                    }
+                    final create = await Cloud.invokeFunction('razorpay-checkout', {
+                      'action': 'create_order',
+                      'checkout_id': _checkoutRequestId ??= DateTime.now().microsecondsSinceEpoch.toString(),
+                      'payment_method': online ? 'razorpay' : 'cod',
+                      'items': s.activeLines.map((l) => {'pid': l.pid, 'qty': l.qty, 'size': l.size, 'color': l.color}).toList(),
+                      'coupon_code': s.appliedCoupon ?? '',
+                      'name': name.text.trim(),
+                      'phone': mobile.text.trim(),
+                      'address': '${addr.text.trim()}, ${town.text.trim()} - ${pin.text.trim()}',
+                    });
+                    if (!mounted) return;
+                    if (!create.ok || create.data == null) {
+                      setState(() => busy = false);
+                      toast(context, create.error ?? 'Could not create order');
+                      return;
+                    }
+                    final serverOrder = create.data!;
+                    final orderId = '${serverOrder['order_id'] ?? ''}';
+                    if (online && serverOrder['already_paid'] != true) {
+                      final amountPaise = (serverOrder['amount'] as num?)?.toInt() ?? 0;
                       final pr = await payWithRazorpay(
-                        amountRupees: s.total,
+                        amountRupees: (amountPaise / 100).round(),
                         description: 'Order at ${s.settings.appName}',
+                        razorpayOrderId: '${serverOrder['razorpay_order_id'] ?? ''}',
+                        razorpayKeyId: '${serverOrder['key_id'] ?? ''}',
                         name: name.text.trim(),
                         email: email.text.trim().isEmpty ? s.authEmail : email.text.trim(),
                         phone: mobile.text.trim(),
@@ -361,20 +359,28 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       if (!mounted) return;
                       if (!pr.ok) {
                         setState(() => busy = false);
-                        toast(context, pr.message);
+                        toast(context, '${pr.message}. Your order will remain payment-pending until the gateway confirms its final status.');
                         return;
                       }
-                      method = 'Online (Paid)';
-                      payId = pr.paymentId;
+                      final verify = await Cloud.invokeFunction('razorpay-checkout', {
+                        'action': 'verify_payment',
+                        'order_id': orderId,
+                        'razorpay_order_id': '${serverOrder['razorpay_order_id'] ?? ''}',
+                        'razorpay_payment_id': pr.paymentId,
+                        'razorpay_signature': pr.signature,
+                      });
+                      if (!mounted) return;
+                      if (!verify.ok || verify.data?['verified'] != true) {
+                        setState(() => busy = false);
+                        toast(context, 'Payment verification is pending. Please do not pay again; contact support with Order $orderId.');
+                        return;
+                      }
                     }
-                    final r = await s.placeOrder(method, paymentId: payId);
+                    await s.syncCloud();
+                    _checkoutRequestId = null;
                     if (!mounted) return;
                     setState(() => busy = false);
-                    if (r != null && r.startsWith('OK:')) {
-                      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => OrderSuccessScreen(orderId: r.substring(3))));
-                    } else {
-                      toast(context, r ?? 'Could not place order');
-                    }
+                    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => OrderSuccessScreen(orderId: orderId)));
                   },
             child: Text(busy ? 'Placing order...' : 'Place order · ₹${s.total}'),
           ),

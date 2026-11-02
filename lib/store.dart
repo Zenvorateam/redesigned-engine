@@ -7,7 +7,6 @@ import 'cloud.dart';
 import 'config.dart';
 import 'notifications.dart';
 import 'models.dart';
-import 'seed.dart';
 
 class StoreScope extends InheritedNotifier<StoreController> {
   const StoreScope(
@@ -18,6 +17,15 @@ class StoreScope extends InheritedNotifier<StoreController> {
   static StoreController read(BuildContext context) =>
       context.getInheritedWidgetOfExactType<StoreScope>()!.notifier!;
 }
+
+const Set<String> _legacyDemoProductNames = {
+  'Classic Cotton T-Shirt', 'Minimal Everyday Hoodie', 'Urban Crossbody Bag',
+  'Classic Analog Watch', 'Slim Everyday Wallet', 'Ceramic Table Vase',
+  'Soft Glow Desk Lamp', 'Minimal Cushion Set', 'Daily Care Essentials',
+  'Travel Grooming Kit', 'Insulated Steel Bottle', 'Everyday Canvas Tote',
+  'Wireless Earbuds', 'Power Bank 10000 mAh', 'Gentle Face Wash',
+  'Kids Graphic Tee', 'Everyday Sneakers',
+};
 
 class StoreController extends ChangeNotifier {
   late SharedPreferences prefs;
@@ -53,6 +61,8 @@ class StoreController extends ChangeNotifier {
 
   // login (Supabase)
   String authUserId = '', authEmail = '', _refresh = '';
+  String? _serverAdminRole;
+  Map<String, dynamic> adminPermissions = {}; 
   DateTime _tokenTime = DateTime.fromMillisecondsSinceEpoch(0);
   Timer? _catalogTimer;
 
@@ -75,13 +85,14 @@ class StoreController extends ChangeNotifier {
 
   Future<void> load() async {
     prefs = await SharedPreferences.getInstance();
-    products = _readList('z2_products', Product.fromJson, seedProducts);
+    products = _readList('z2_products', Product.fromJson, () => <Product>[]);
     categories =
-        _readList('z2_categories', CategoryItem.fromJson, seedCategories);
-    banners = _readList('z2_banners', BannerItem.fromJson, seedBanners);
-    coupons = _readList('z2_coupons', Coupon.fromJson, seedCoupons);
+        _readList('z2_categories', CategoryItem.fromJson, () => <CategoryItem>[]);
+    banners = _readList('z2_banners', BannerItem.fromJson, () => <BannerItem>[]);
+    coupons = _readList('z2_coupons', Coupon.fromJson, () => <Coupon>[]);
     reviews = _readList('z2_reviews', Review.fromJson, () => <Review>[]);
-    admins = _readList('z2_admins', AdminUser.fromJson, seedAdmins);
+    admins = _readList('z2_admins', AdminUser.fromJson, () => <AdminUser>[])
+      ..removeWhere((a) => a.role == 'owner');
     cart = _readList('z2_cart', CartLine.fromJson, () => <CartLine>[]);
     orders = _readList<Map<String, dynamic>>(
         'z_orders', (m) => m, () => <Map<String, dynamic>>[]);
@@ -110,9 +121,10 @@ class StoreController extends ChangeNotifier {
     authUserId = prefs.getString('z3_uid') ?? '';
     authEmail = prefs.getString('z3_auth_email') ?? '';
     _refresh = prefs.getString('z3_refresh') ?? '';
-    // make sure an owner always exists
-    if (!admins.any((a) => a.role == 'owner'))
-      admins.insert(0, seedAdmins().first);
+    // No demo products, coupons, banners or local owner credentials are seeded.
+    // Existing customer-created local data is preserved.
+    products.removeWhere((p) => _legacyDemoProductNames.contains(p.name) && p.sku == 'ZN-${p.id}');
+    coupons.removeWhere((c) => (c.code.toUpperCase() == 'WELCOME10' && c.title == 'Welcome offer') || (c.code.toUpperCase() == 'FLAT100' && c.title == 'Flat Rs 100 off'));
   }
 
   Future<void> _save() async {
@@ -216,6 +228,7 @@ class StoreController extends ChangeNotifier {
 
   Future<void> _afterLogin(AuthSession s, String fallbackName) async {
     _setSession(s);
+    await _refreshAdminRole();
     final nm = s.name.isNotEmpty ? s.name : fallbackName;
     if (nm.isNotEmpty) customerName = nm;
     customerEmail = s.email;
@@ -269,13 +282,15 @@ class StoreController extends ChangeNotifier {
   Future<void> syncCloud() async {
     if (!AppConfig.supabaseReady) return;
     await _fresh();
+    if (isLoggedIn) await _refreshAdminRole();
 
     // store catalog (products, banners, coupons, settings) - admin ne jo set kiya
     final cat = await Cloud.select('app_data',
         query: {'key': 'eq.catalog', 'select': 'data'});
     if (cat != null) {
       if (cat.isNotEmpty) {
-        _applyCatalog(Map<String, dynamic>.from(cat.first['data'] as Map));
+        final cleanedDemoCatalog = _applyCatalog(Map<String, dynamic>.from(cat.first['data'] as Map));
+        if (cleanedDemoCatalog && isAdmin) await _pushCatalog();
       } else if (isAdmin && isLoggedIn) {
         await _pushCatalog();
       }
@@ -300,11 +315,6 @@ class StoreController extends ChangeNotifier {
     }
 
     if (isLoggedIn) {
-      // pehle jo orders push nahi ho paye the
-      final pending = orders.where((o) => o['pending'] == true).toList();
-      for (final o in pending) {
-        if (await _pushOrder(o) == null) o.remove('pending');
-      }
       final mine = await Cloud.select('orders', query: {
         'select': 'id,status,data,created_at',
         'user_id': 'eq.$authUserId',
@@ -356,16 +366,20 @@ class StoreController extends ChangeNotifier {
         'settings': settings.toJson(),
       };
 
-  void _applyCatalog(Map<String, dynamic> j) {
+  bool _applyCatalog(Map<String, dynamic> j) {
     try {
       List<T> list<T>(String k, T Function(Map<String, dynamic>) f) =>
           (j[k] as List)
               .map((e) => f(Map<String, dynamic>.from(e as Map)))
               .toList();
-      final p = list('products', Product.fromJson);
+      final rawProducts = list('products', Product.fromJson);
+      final p = rawProducts
+        ..removeWhere((x) => _legacyDemoProductNames.contains(x.name) && x.sku == 'ZN-${x.id}');
       final c = list('categories', CategoryItem.fromJson);
-      final b = list('banners', BannerItem.fromJson);
-      final cp = list('coupons', Coupon.fromJson);
+      final rawBanners = list('banners', BannerItem.fromJson);
+      final b = rawBanners..removeWhere((x) => x.image.trim().isEmpty && ['Fashion', 'Accessories', 'Home'].contains(x.category));
+      final rawCoupons = list('coupons', Coupon.fromJson);
+      final cp = rawCoupons..removeWhere((x) => (x.code.toUpperCase() == 'WELCOME10' && x.title == 'Welcome offer') || (x.code.toUpperCase() == 'FLAT100' && x.title == 'Flat Rs 100 off'));
       final st = StoreSettings.fromJson(
           Map<String, dynamic>.from(j['settings'] as Map));
       products = p;
@@ -373,7 +387,10 @@ class StoreController extends ChangeNotifier {
       banners = b;
       coupons = cp;
       settings = st;
-    } catch (_) {}
+      return p.length != rawProducts.length || b.length != rawBanners.length || cp.length != rawCoupons.length;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> _pushCatalog() async {
@@ -396,27 +413,57 @@ class StoreController extends ChangeNotifier {
   // ------------------------------------------------------------ SETTINGS / ROLE
   Color get accent => settings.accentColor;
 
+  Future<void> _refreshAdminRole() async {
+    if (!isLoggedIn || !AppConfig.supabaseReady) {
+      _serverAdminRole = null;
+      adminPermissions = {};
+      return;
+    }
+    final rows = await Cloud.select('admin_roles', query: {
+      'select': 'role,active,permissions',
+      'user_id': 'eq.$authUserId',
+      'limit': '1',
+    });
+    if (rows != null && rows.isNotEmpty && rows.first['active'] == true) {
+      _serverAdminRole = '${rows.first['role'] ?? ''}';
+      adminPermissions = Map<String, dynamic>.from((rows.first['permissions'] as Map?) ?? const {});
+    } else {
+      _serverAdminRole = null;
+      adminPermissions = {};
+    }
+  }
+
   AdminUser? get currentAdmin {
+    if (_serverAdminRole != null && _serverAdminRole!.isNotEmpty) {
+      return AdminUser(
+        name: customerName.isEmpty ? 'Team Admin' : customerName,
+        phone: phone,
+        pin: '',
+        role: _serverAdminRole!,
+      );
+    }
+    // Bootstrap compatibility for the existing owner email allow-list.
     if (AppConfig.isAdminEmail(authEmail)) {
       return AdminUser(
-          name: customerName.isEmpty ? 'Owner' : customerName,
+          name: customerName.isEmpty ? 'Super Admin' : customerName,
           phone: phone,
-          pin: AppConfig.adminPin,
-          role: 'owner');
-    }
-    if (phone.isEmpty) return null;
-    for (final a in admins) {
-      if (a.phone.isNotEmpty && a.phone == phone) return a;
+          pin: '',
+          role: 'super_admin');
     }
     return null;
   }
 
   bool get isAdmin => currentAdmin != null;
-  bool get isOwner => currentAdmin?.role == 'owner';
+  bool canManage(String permission) {
+    if (isOwner) return true;
+    if (_serverAdminRole == 'staff') return permission == 'products.manage' || permission == 'orders.manage';
+    return adminPermissions[permission] == true || adminPermissions['*'] == true;
+  }
+  bool get isOwner => currentAdmin?.role == 'owner' || currentAdmin?.role == 'super_admin';
 
   bool unlockAdmin(String pin) {
-    final a = currentAdmin;
-    if (a != null && a.pin == pin) {
+    // Admin access is tied to the authenticated account; never rely on a hard-coded app PIN.
+    if (isAdmin && isLoggedIn) {
       adminUnlocked = true;
       notifyListeners();
       return true;
@@ -562,27 +609,7 @@ class StoreController extends ChangeNotifier {
   int get memberDaysLeft =>
       isMember ? membershipEnds!.difference(DateTime.now()).inDays + 1 : 0;
 
-  Future<void> activateMembership(String paymentId) async {
-    final base = isMember ? membershipEnds! : DateTime.now();
-    membershipUntil = base
-        .add(const Duration(days: AppConfig.membershipDays))
-        .toUtc()
-        .toIso8601String();
-    if (!members.contains(authUserId.isEmpty ? 'device-user' : authUserId))
-      members.add(authUserId.isEmpty ? 'device-user' : authUserId);
-    if (AppConfig.supabaseReady && isLoggedIn) {
-      await _fresh();
-      await Cloud.insert(
-          'memberships',
-          {
-            'user_id': authUserId,
-            'active_until': membershipUntil,
-            'payment_id': paymentId
-          },
-          upsert: true);
-    }
-    await commit();
-  }
+
 
   // ------------------------------------------------------------ CART + PRICING
   List<CartLine> get cartLines =>
@@ -761,6 +788,9 @@ class StoreController extends ChangeNotifier {
   }
 
   Future<String?> placeOrder(String payment, {String paymentId = ''}) async {
+    if (AppConfig.supabaseReady) {
+      return 'Use the secure server checkout flow. Direct client-side order creation is disabled.';
+    }
     final lines = activeLines;
     if (lines.isEmpty) return 'Your cart is empty';
     final issue = stockIssue();
@@ -889,14 +919,6 @@ class StoreController extends ChangeNotifier {
             body: '${o['name'] ?? 'Customer'} · ₹${o['total']}',
             date: '${o['date']}'));
       }
-    }
-    if (isMember && memberDaysLeft <= 3) {
-      out.add(AppNotice(
-          kind: 'member',
-          title: '${AppConfig.membershipName} ends soon',
-          body:
-              'Renew for ₹${AppConfig.membershipPrice} to keep free delivery.',
-          date: DateTime.now().toIso8601String()));
     }
     out.sort((a, b) => b.date.compareTo(a.date));
     for (final c in coupons.where((c) => c.active && c.notify)) {

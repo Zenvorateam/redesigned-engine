@@ -3,6 +3,7 @@ import 'models.dart';
 import 'store.dart';
 import 'widgets.dart';
 import 'config.dart';
+import 'admin_ops.dart';
 
 // ------------------------------------------------------------------ HELPERS
 Widget _tf(TextEditingController c, String label, {TextInputType? type, int lines = 1, String? hint}) => Padding(
@@ -103,7 +104,16 @@ class AdminHome extends StatelessWidget {
       return Scaffold(appBar: AppBar(title: const Text('Admin panel')), body: const EmptyState(title: 'Access denied', subtitle: 'Admin login required.', icon: Icons.lock_outline));
     }
 
-    Widget menu(IconData icon, String title, String sub, int g, Widget page) => Container(
+    Widget menu(IconData icon, String title, String sub, int g, Widget page) {
+      final permission = <String, String>{
+        'Products':'products.manage','Categories':'settings.manage','Banners':'settings.manage','Orders':'orders.manage',
+        'Returns & replacements':'returns.manage','Refund management':'refunds.manage','Customer support':'support.manage',
+        'X-Admin & Staff access':'admins.manage','Suppliers & supply chain':'suppliers.manage','Supplier payments':'suppliers.manage',
+        'Membership plans':'membership.manage','Customer messages':'messages.send','Business analytics':'analytics.view',
+        'Coupons & notifications':'coupons.manage','Payment receipts':'receipts.view','Product return policies':'products.manage','Backup & restore':'audit.view','Store settings':'settings.manage'
+      }[title] ?? 'settings.manage';
+      if (!s.canManage(permission)) return const SizedBox.shrink();
+      return Container(
           margin: const EdgeInsets.only(bottom: 8),
           decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: line)),
           child: ListTile(
@@ -115,6 +125,7 @@ class AdminHome extends StatelessWidget {
             trailing: const Icon(Icons.chevron_right, color: muted),
           ),
         );
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -145,33 +156,29 @@ class AdminHome extends StatelessWidget {
             _Stat(Icons.currency_rupee_rounded, 'Revenue', '₹${s.revenue}', 1),
             _Stat(Icons.reviews_outlined, 'Reviews', '${s.reviews.length}', 2),
             _Stat(Icons.cancel_outlined, 'Cancelled', '${s.cancelledCount}', 0),
-            _Stat(Icons.support_agent_outlined, 'Support tries', '${s.supportTries}', 3, sub: 'call / WhatsApp taps'),
-            _Stat(Icons.inventory_2_outlined, 'Stock units', '${s.stockUnits}', 1, sub: '${s.lowStock.length} low · ${s.outOfStock.length} out'),
             _Stat(Icons.workspace_premium_outlined, 'Members', '${s.members.length}', 2),
             _Stat(Icons.category_outlined, 'Products', '${s.products.length}', 0, sub: '${s.categories.length} categories'),
           ],
         ),
-        if (s.lowStock.isNotEmpty || s.outOfStock.isNotEmpty) ...[
-          _h('Stock alerts'),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: softBox(2, radius: 16),
-            child: Column(
-              children: [
-                ...s.outOfStock.take(5).map((p) => _alert(p.name, 'Out of stock', danger)),
-                ...s.lowStock.take(5).map((p) => _alert(p.name, 'Only ${p.stock} left', const Color(0xFFD97706))),
-              ],
-            ),
-          ),
-        ],
         _h('Manage'),
         menu(Icons.add_box_outlined, 'Products', 'Add, edit, stock, delete', 1, const AdminProductsScreen()),
         menu(Icons.grid_view_outlined, 'Categories', 'Home category slider', 3, const AdminCategoriesScreen()),
         menu(Icons.view_carousel_outlined, 'Banners', 'Slider images and category links', 2, const AdminBannersScreen()),
         menu(Icons.receipt_long_outlined, 'Orders', 'View and update order status', 0, const AdminOrdersScreen()),
+        menu(Icons.assignment_return_outlined, 'Returns & replacements', 'Return requests, pickup and decisions', 2, const AdminOpsScreen(title: 'Returns', table: 'return_requests', permission: 'returns.manage', statusField: 'status')),
+        menu(Icons.payments_outlined, 'Refund management', 'Payout details, approval and refund records', 1, const AdminOpsScreen(title: 'Refunds', table: 'refund_records', permission: 'refunds.manage', statusField: 'status')),
+        menu(Icons.support_agent_outlined, 'Customer support', 'Tickets and customer complaints', 3, const AdminOpsScreen(title: 'Support tickets', table: 'support_tickets', permission: 'support.manage', statusField: 'status')),
+        menu(Icons.people_alt_outlined, 'X-Admin & Staff access', 'Manage roles through secure admin function', 0, const AdminAccessScreen()),
+        menu(Icons.local_shipping_outlined, 'Suppliers & supply chain', 'Suppliers and partner payments', 2, const AdminOpsScreen(title: 'Suppliers', table: 'suppliers', permission: 'suppliers.manage', fields: ['name','phone','email','notes'])),
+        menu(Icons.account_balance_wallet_outlined, 'Supplier payments', 'Record supplier settlements', 1, const AdminOpsScreen(title: 'Supplier payments', table: 'supplier_payments', permission: 'suppliers.manage', fields: ['supplier_id','order_id','amount','status','reference'])),
+        menu(Icons.workspace_premium_outlined, 'Membership plans', 'Silver, Gold and Platinum plans', 2, const AdminOpsScreen(title: 'Membership plans', table: 'membership_plans', permission: 'membership.manage', statusField: 'active')),
+        menu(Icons.notifications_active_outlined, 'Customer messages', 'In-app announcements and offers', 3, const AdminOpsScreen(title: 'Admin messages', table: 'admin_messages', permission: 'messages.send', fields: ['title','body','target','active'])),
+        menu(Icons.analytics_outlined, 'Business analytics', 'Operational counts and performance', 0, const AdminReportsScreen()),
         menu(Icons.local_offer_outlined, 'Coupons & notifications', 'Create offers shown to customers', 1, const AdminCouponsScreen()),
-        if (s.isOwner) ...[
-          menu(Icons.groups_outlined, 'Staff (admins)', 'Add or remove staff access', 3, const AdminStaffScreen()),
+        menu(Icons.receipt_long_outlined, 'Payment receipts', 'Verified payment receipts', 1, const AdminOpsScreen(title: 'Payment receipts', table: 'payment_receipts', permission: 'receipts.view', statusField: '')),
+        menu(Icons.policy_outlined, 'Product return policies', 'Returnable, replacement or no return', 2, const AdminOpsScreen(title: 'Product policies', table: 'product_policies', permission: 'products.manage', fields: ['product_id','policy_type','return_days','policy_text'], statusField: '')),
+        menu(Icons.backup_outlined, 'Backup & restore', 'Backup configuration and audit history', 3, const AdminOpsScreen(title: 'Audit logs', table: 'audit_logs', permission: 'audit.view', statusField: '')),
+        if (s.canManage('settings.manage')) ...[
           menu(Icons.tune_rounded, 'Store settings', 'Theme, colour, text, footer, delivery', 2, const AdminSettingsScreen()),
         ],
         const SizedBox(height: 10),
@@ -251,7 +258,7 @@ class AdminProductsScreen extends StatelessWidget {
                             style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: p.stock <= 0 ? danger : (p.stock <= 5 ? const Color(0xFFD97706) : success))),
                       ]),
                     ),
-                    Column(children: [
+                    if (s.currentAdmin?.role != 'staff') Column(children: [
                       IconButton(
                         visualDensity: VisualDensity.compact,
                         onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProductFormScreen(product: p))),
@@ -772,6 +779,7 @@ class AdminOrderDetail extends StatelessWidget {
             Text('${o['address'] ?? ''}', style: const TextStyle(color: Color(0xFF4B5563), fontSize: 13, height: 1.4)),
           ]),
         ),
+        if (s.currentAdmin?.role != 'staff') ...[
         _h('Update status'),
         Wrap(
           spacing: 8,
@@ -783,6 +791,7 @@ class AdminOrderDetail extends StatelessWidget {
                   }))
               .toList(),
         ),
+        ],
         _h('Items'),
         ...(o['items'] as List).map((raw) {
           final it = raw as Map;
@@ -812,81 +821,6 @@ class AdminOrderDetail extends StatelessWidget {
   }
 }
 
-// ------------------------------------------------------------------ STAFF
-class AdminStaffScreen extends StatelessWidget {
-  const AdminStaffScreen({super.key});
-
-  Future<void> _edit(BuildContext context, StoreController s, {AdminUser? item}) async {
-    final name = TextEditingController(text: item?.name ?? '');
-    final phone = TextEditingController(text: item?.phone ?? '');
-    final pin = TextEditingController(text: item?.pin ?? '');
-    await adminSheet(
-      context,
-      title: item == null ? 'Add staff' : 'Edit ${item.role}',
-      body: (setS) => [
-        _tf(name, 'Name'),
-        _tf(phone, 'Mobile number (they must use this in their profile)', type: TextInputType.phone),
-        _tf(pin, 'Admin PIN (4-6 digits)', type: TextInputType.number),
-      ],
-      onSave: () async {
-        final ph = phone.text.trim();
-        final pn = pin.text.trim();
-        if (name.text.trim().isEmpty) return 'Enter a name';
-        if (phoneCheck(ph) != null) return 'Enter a valid 10 digit mobile number';
-        if (!RegExp(r'^\d{4,6}$').hasMatch(pn)) return 'PIN must be 4 to 6 digits';
-        if (s.admins.any((a) => a.phone == ph && a != item)) return 'This number is already an admin';
-        if (item == null) {
-          s.admins.add(AdminUser(name: name.text.trim(), phone: ph, pin: pn));
-        } else {
-          item
-            ..name = name.text.trim()
-            ..phone = ph
-            ..pin = pn;
-        }
-        await s.commit();
-        return null;
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final s = StoreScope.of(context);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Staff (admins)')),
-      floatingActionButton: FloatingActionButton.extended(onPressed: () => _edit(context, s), icon: const Icon(Icons.person_add_alt_1_outlined), label: const Text('Add staff')),
-      body: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
-        itemCount: s.admins.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 8),
-        itemBuilder: (c, i) {
-          final a = s.admins[i];
-          return Container(
-            decoration: softBox(i, radius: 16),
-            child: ListTile(
-              leading: CircleAvatar(backgroundColor: accentOf(context), child: Text(a.name.isEmpty ? '?' : a.name[0].toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900))),
-              title: Text(a.name, style: const TextStyle(fontWeight: FontWeight.w800)),
-              subtitle: Text('${a.role == 'owner' ? 'Owner' : 'Staff'} · +91 ${a.phone}', style: const TextStyle(fontSize: 12)),
-              onTap: () => _edit(context, s, item: a),
-              trailing: a.role == 'owner'
-                  ? null
-                  : IconButton(
-                      icon: const Icon(Icons.delete_outline, color: danger),
-                      onPressed: () async {
-                        if (await _confirm(context, 'Remove staff?', a.name)) {
-                          s.admins.removeAt(i);
-                          await s.commit();
-                        }
-                      },
-                    ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
 // ------------------------------------------------------------------ STORE SETTINGS
 class AdminSettingsScreen extends StatefulWidget {
   const AdminSettingsScreen({super.key});
@@ -895,7 +829,7 @@ class AdminSettingsScreen extends StatefulWidget {
 }
 
 class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
-  late final TextEditingController appName, tagline, ship, free, eta, etaM, t1, p1, t2, p2, supp, wa, ret, footer, links;
+  late final TextEditingController appName, tagline, logoUrl, ship, free, eta, etaM, t1, p1, t2, p2, supp, wa, ret, footer, links;
   int accent = 0;
 
   @override
@@ -904,6 +838,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     final st = StoreScope.read(context).settings;
     appName = TextEditingController(text: st.appName);
     tagline = TextEditingController(text: st.tagline);
+    logoUrl = TextEditingController(text: st.logoUrl);
     ship = TextEditingController(text: '${st.shippingFee}');
     free = TextEditingController(text: '${st.freeShipAbove}');
     eta = TextEditingController(text: '${st.etaDays}');
@@ -922,7 +857,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
 
   @override
   void dispose() {
-    for (final c in [appName, tagline, ship, free, eta, etaM, t1, p1, t2, p2, supp, wa, ret, footer, links]) {
+    for (final c in [appName, tagline, logoUrl, ship, free, eta, etaM, t1, p1, t2, p2, supp, wa, ret, footer, links]) {
       c.dispose();
     }
     super.dispose();
@@ -934,6 +869,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     st
       ..appName = appName.text.trim().isEmpty ? st.appName : appName.text.trim()
       ..tagline = tagline.text.trim()
+      ..logoUrl = logoUrl.text.trim()
       ..accent = accent
       ..shippingFee = _n(ship, st.shippingFee)
       ..freeShipAbove = _n(free, st.freeShipAbove)
@@ -970,6 +906,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         _h('Branding'),
         _tf(appName, 'Store name'),
         _tf(tagline, 'Tagline'),
+        _tf(logoUrl, 'Logo image URL (https://...)', hint: 'Paste a direct image URL'),
         const Text('Theme colour', style: TextStyle(color: muted, fontSize: 12, fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),
         Wrap(
@@ -1003,9 +940,6 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           const SizedBox(width: 10),
           Expanded(child: _tf(etaM, 'Member days', type: TextInputType.number)),
         ]),
-        _h('Membership'),
-        Text('${AppConfig.membershipName}: ₹${AppConfig.membershipPrice}/month, free delivery on every order. Price and duration are set in lib/config.dart.',
-            style: const TextStyle(color: muted, fontSize: 12, height: 1.4)),
         _h('Support'),
         _tf(supp, 'Support phone number', type: TextInputType.phone),
         _tf(wa, 'WhatsApp number (optional)', type: TextInputType.phone),

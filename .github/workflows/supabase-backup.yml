@@ -1,0 +1,25 @@
+name: Scheduled Supabase database backup
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 20 * * 0'
+permissions:
+  contents: read
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Create database backup
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          test -n "$SUPABASE_DB_URL" || (echo 'Set GitHub secret SUPABASE_DB_URL'; exit 1)
+          pg_dump "$SUPABASE_DB_URL" --format=custom --no-owner --no-acl --file=zv-backup-$(date -u +%Y%m%d-%H%M).dump
+      - name: Store backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zenvora-supabase-backup-${{ github.run_number }}
+          path: '*.dump'
+          retention-days: 30

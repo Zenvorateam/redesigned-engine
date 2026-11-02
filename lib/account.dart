@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'cloud.dart';
 import 'auth.dart';
 import 'config.dart';
 import 'models.dart';
-import 'pay.dart';
 import 'store.dart';
 import 'widgets.dart';
 import 'home.dart';
@@ -12,39 +12,10 @@ class AccountScreen extends StatelessWidget {
   const AccountScreen({super.key});
 
   Future<void> _openAdmin(BuildContext context, StoreController s) async {
-    if (s.adminUnlocked) {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminHome()));
-      return;
-    }
-    final c = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Admin PIN'),
-        content: TextField(
-          controller: c,
-          obscureText: true,
-          autofocus: true,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(hintText: 'Enter your admin PIN'),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('Cancel')),
-          FilledButton(
-            style: FilledButton.styleFrom(minimumSize: const Size(90, 44)),
-            onPressed: () => Navigator.pop(ctx, s.unlockAdmin(c.text.trim())),
-            child: const Text('Unlock'),
-          ),
-        ],
-      ),
-    );
-    c.dispose();
+    if (!s.isAdmin || !s.isLoggedIn) return;
+    s.unlockAdmin('');
     if (!context.mounted) return;
-    if (ok == true) {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminHome()));
-    } else if (ok == false) {
-      toast(context, 'Wrong PIN');
-    }
+    Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminHome()));
   }
 
   Future<void> _signOut(BuildContext context, StoreController s) async {
@@ -108,15 +79,6 @@ class AccountScreen extends StatelessWidget {
                       const SizedBox(height: 2),
                       if (s.customerEmail.isNotEmpty) Text(s.customerEmail, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: muted, fontSize: 12)),
                       Text(s.phone.isEmpty ? 'Add your mobile number' : '+91 ${s.phone}', style: const TextStyle(color: muted, fontSize: 12)),
-                      if (s.isMember)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Row(mainAxisSize: MainAxisSize.min, children: [
-                            const Icon(Icons.workspace_premium_rounded, size: 15, color: Color(0xFFB45309)),
-                            const SizedBox(width: 4),
-                            Text('${AppConfig.membershipName} member', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFFB45309))),
-                          ]),
-                        ),
                     ]),
                   ),
                   IconButton(
@@ -145,38 +107,6 @@ class AccountScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-
-        // ---- membership card
-        GestureDetector(
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MembershipScreen())),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF16181D), Color(0xFF30343F)]),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(children: [
-              const Icon(Icons.workspace_premium_rounded, size: 34, color: Color(0xFFF5B301)),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(s.isMember ? '${AppConfig.membershipName} · Active' : AppConfig.membershipName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
-                  const SizedBox(height: 3),
-                  Text(
-                    s.isMember ? 'Free delivery on every order · ${s.memberDaysLeft} days left' : 'Free & faster delivery on every order for ₹${AppConfig.membershipPrice}/month',
-                    style: const TextStyle(color: Color(0xCCFFFFFF), fontSize: 12, height: 1.3),
-                  ),
-                ]),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(color: const Color(0xFFF5B301), borderRadius: BorderRadius.circular(20)),
-                child: Text(s.isMember ? 'Manage' : 'Join', style: const TextStyle(color: Color(0xFF16181D), fontWeight: FontWeight.w900, fontSize: 12)),
-              ),
-            ]),
-          ),
-        ),
 
         // ---- lists
         _label('SHOPPING'),
@@ -231,13 +161,6 @@ class AccountScreen extends StatelessWidget {
 
         _label('PREFERENCES & HELP'),
         _Group(children: [
-          _Row(
-            icon: s.dark ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
-            title: 'Dark mode',
-            subtitle: s.dark ? 'On' : 'Off',
-            onTap: () => s.setDark(!s.dark),
-            trailing: Switch(value: s.dark, onChanged: (v) => s.setDark(v)),
-          ),
           _Row(
             icon: Icons.support_agent_outlined,
             title: 'Help & support',
@@ -480,6 +403,18 @@ class OrderDetailScreen extends StatelessWidget {
         const Text('Delivery address', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
         const SizedBox(height: 6),
         Text('${o['name'] ?? ''}\n${o['address'] ?? ''}\n+91 ${o['phone'] ?? ''}', style: const TextStyle(color: Color(0xFF4B5563), height: 1.5, fontSize: 13)),
+        if (status.toLowerCase() == 'delivered') ...[
+          const SizedBox(height: 14),
+          OutlinedButton.icon(onPressed: () async {
+            final reason = TextEditingController();
+            final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(title: const Text('Return / replacement request'), content: TextField(controller: reason, maxLines: 3, decoration: const InputDecoration(labelText: 'Reason for return')), actions: [TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('Cancel')),FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('Submit'))]));
+            if (ok == true && reason.text.trim().isNotEmpty) {
+              final result = await Cloud.invokeFunction('return-request', {'order_id':'$orderId','reason':reason.text.trim()});
+              if (context.mounted) toast(context, result.ok ? 'Return request submitted' : (result.error ?? 'Could not submit return request'));
+            }
+            reason.dispose();
+          }, icon: const Icon(Icons.assignment_return_outlined), label: const Text('Request return / replacement')),
+        ],
         if (canCancel) ...[
           const SizedBox(height: 20),
           OutlinedButton(
@@ -501,149 +436,6 @@ class OrderDetailScreen extends StatelessWidget {
             child: const Text('Cancel order'),
           ),
         ],
-      ]),
-    );
-  }
-}
-
-// ------------------------------------------------------------------ MEMBERSHIP
-class MembershipScreen extends StatefulWidget {
-  const MembershipScreen({super.key});
-  @override
-  State<MembershipScreen> createState() => _MembershipScreenState();
-}
-
-class _MembershipScreenState extends State<MembershipScreen> {
-  bool busy = false;
-
-  Future<void> _buy(StoreController s) async {
-    if (!await ensureLogin(context)) return;
-    if (!AppConfig.razorpayReady) {
-      if (mounted) toast(context, 'Payments are not set up yet. Add the Razorpay key in config.dart');
-      return;
-    }
-    setState(() => busy = true);
-    final r = await payWithRazorpay(
-      amountRupees: AppConfig.membershipPrice,
-      description: '${AppConfig.membershipName} · ${AppConfig.membershipDays} days',
-      name: s.customerName,
-      email: s.customerEmail,
-      phone: s.phone,
-    );
-    if (r.ok) await s.activateMembership(r.paymentId);
-    if (!mounted) return;
-    setState(() => busy = false);
-    toast(context, r.ok ? '${AppConfig.membershipName} is active. Enjoy free delivery!' : r.message);
-  }
-
-  Widget _benefit(IconData icon, String title, String sub) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 9),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: line)),
-            child: Icon(icon, size: 20),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
-              const SizedBox(height: 2),
-              Text(sub, style: const TextStyle(color: muted, fontSize: 12, height: 1.4)),
-            ]),
-          ),
-        ]),
-      );
-
-  @override
-  Widget build(BuildContext context) {
-    final s = StoreScope.of(context);
-    final st = s.settings;
-    final member = s.isMember;
-    const gold = Color(0xFFF5B301);
-    final ends = s.membershipEnds;
-
-    return Scaffold(
-      appBar: AppBar(title: Text(AppConfig.membershipName)),
-      body: Column(children: [
-        Expanded(
-          child: ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 20), children: [
-            // hero
-            Container(
-              padding: const EdgeInsets.all(22),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF16181D), Color(0xFF353A46)]),
-                borderRadius: BorderRadius.circular(26),
-              ),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  const Icon(Icons.workspace_premium_rounded, color: gold, size: 30),
-                  const SizedBox(width: 10),
-                  Text(AppConfig.membershipName.toUpperCase(), style: const TextStyle(color: gold, fontWeight: FontWeight.w900, letterSpacing: 2.2, fontSize: 14)),
-                  const Spacer(),
-                  if (member)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(color: const Color(0x33F5B301), borderRadius: BorderRadius.circular(20)),
-                      child: const Text('ACTIVE', style: TextStyle(color: gold, fontWeight: FontWeight.w900, fontSize: 10, letterSpacing: 1)),
-                    ),
-                ]),
-                const SizedBox(height: 22),
-                Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  Text('₹${AppConfig.membershipPrice}', style: const TextStyle(color: Colors.white, fontSize: 46, fontWeight: FontWeight.w900, height: 1)),
-                  const Padding(padding: EdgeInsets.only(bottom: 6, left: 6), child: Text('/ month', style: TextStyle(color: Color(0xB3FFFFFF), fontSize: 15))),
-                ]),
-                const SizedBox(height: 10),
-                Text(
-                  member && ends != null
-                      ? 'Active till ${shortDate(ends.toIso8601String()).split('  ').first}  ·  ${s.memberDaysLeft} days left'
-                      : 'Free delivery on every product, as long as your membership is active.',
-                  style: const TextStyle(color: Color(0xCCFFFFFF), fontSize: 13, height: 1.4),
-                ),
-              ]),
-            ),
-            const SizedBox(height: 18),
-            const Text('What you get', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
-            const SizedBox(height: 4),
-            _benefit(Icons.local_shipping_outlined, 'FREE delivery on every product', 'No delivery charges on any order, any amount. Normally ₹${st.shippingFee} on orders below ₹${st.freeShipAbove}.'),
-            _benefit(Icons.bolt_rounded, 'Faster delivery', 'Get your orders in ${st.etaDaysMember} days instead of ${st.etaDays}.'),
-            _benefit(Icons.verified_outlined, 'Works automatically', 'Your benefits apply in the cart and at checkout. Nothing to enter.'),
-            if (st.shippingFee >= AppConfig.membershipPrice)
-              Container(
-                margin: const EdgeInsets.only(top: 12),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), border: Border.all(color: line)),
-                child: Row(children: [
-                  const Icon(Icons.savings_outlined, size: 22, color: success),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text('Pays for itself with just one order. You save ₹${st.shippingFee} on every delivery.', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, height: 1.4)),
-                  ),
-                ]),
-              ),
-            const SizedBox(height: 14),
-            Text(
-              'One-time payment of ₹${AppConfig.membershipPrice} for ${AppConfig.membershipDays} days. No auto-renewal. Buying again while active adds ${AppConfig.membershipDays} more days.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: muted, fontSize: 11, height: 1.5),
-            ),
-          ]),
-        ),
-        Container(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-          decoration: BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: line))),
-          child: SafeArea(
-            top: false,
-            child: SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: busy ? null : () => _buy(s),
-                child: Text(busy ? 'Please wait...' : (member ? 'Extend by ${AppConfig.membershipDays} days · ₹${AppConfig.membershipPrice}' : 'Join now · ₹${AppConfig.membershipPrice}/month')),
-              ),
-            ),
-          ),
-        ),
       ]),
     );
   }
@@ -702,7 +494,6 @@ class SupportScreen extends StatelessWidget {
       ['How long does delivery take?', 'Usually 3-5 days. Members get faster delivery and free delivery on every order.'],
       ['How do I return a product?', 'Returns are accepted on unused products as per the return policy shown on each product page.'],
       ['Can I cancel my order?', 'Yes. Open My orders and cancel while the order is Placed or Confirmed.'],
-      ['How does membership work?', 'Join for ₹${AppConfig.membershipPrice}/month and get free, faster delivery on every order. See the Membership page.'],
     ];
 
     return Scaffold(
@@ -731,6 +522,16 @@ class SupportScreen extends StatelessWidget {
             ),
           ),
         ]),
+        const SizedBox(height: 16),
+        OutlinedButton.icon(onPressed: () async {
+          final subject = TextEditingController(); final detail = TextEditingController();
+          final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(title: const Text('Create support ticket'), content: Column(mainAxisSize: MainAxisSize.min, children: [TextField(controller: subject, decoration: const InputDecoration(labelText: 'Subject')), TextField(controller: detail, maxLines: 3, decoration: const InputDecoration(labelText: 'Describe your issue'))]), actions: [TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('Cancel')),FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('Submit'))]));
+          if (ok == true && subject.text.trim().isNotEmpty && s.authUserId.isNotEmpty) {
+            final err = await Cloud.insert('support_tickets', {'user_id':s.authUserId,'subject':subject.text.trim(),'category':'general'});
+            if (context.mounted) toast(context, err ?? 'Support ticket created');
+          }
+          subject.dispose(); detail.dispose();
+        }, icon: const Icon(Icons.add_comment_outlined), label: const Text('Create support ticket')),
         const SizedBox(height: 22),
         const Text('Frequently asked questions', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
         const SizedBox(height: 8),
