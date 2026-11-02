@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:915356905336:android:ba983ed1ca6e82bb9ae28d",
+        "mobilesdk_app_id": "1:915356905336:android:80f0536045fb17bf9ae28d",
         "android_client_info": {
-          "package_name": "com.shrivagar.zenvora"
+          "package_name": "com.zenvora.zenvora"
         }
       },
       "oauth_client": [],
