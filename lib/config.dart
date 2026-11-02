@@ -12,8 +12,8 @@ class AppConfig {
   // Option 2: assets/logo.png (pubspec me already folder added hai)
   //           -> file rakho `assets/logo/logo.png` aur logoAsset me wahi path daalo
   // Dono khali chhodoge to "Z" letter wala default logo dikhega.
-  static const String logoUrl = '';
-  static const String logoAsset = ''; // e.g. 'assets/logo/logo.png'
+  static const String logoUrl = 'https://pin.it/3CGOvOBrv';
+  static const String logoAsset = 'assets/logo/logo.png'; // e.g. 'assets/logo/logo.png'
 
   // ---------------------------------------------------------------- SUPABASE
   // Supabase > Project Settings > API
