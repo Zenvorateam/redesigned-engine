@@ -5,8 +5,6 @@ import 'config.dart';
 // Pehli baar owner ka phone aur PIN yahan se set hota hai.
 // Profile mein ye phone number daalo, phir Account > Admin Panel khulega aur PIN maangega.
 // Baad mein Admin > Staff se isko badal sakte ho.
-const String kOwnerPhone = AppConfig.ownerPhone;
-const String kOwnerPin = AppConfig.adminPin;
 
 // ---------------------------------------------------------------- COLORS
 const Color ink = Color(0xFF16181D);
@@ -254,20 +252,21 @@ class AdminUser {
 }
 
 class StoreSettings {
-  String appName, tagline, footerText, returnPolicy, supportPhone, whatsapp;
+  String appName, tagline, footerText, returnPolicy, supportPhone, whatsapp, logoUrl;
   int accent, shippingFee, freeShipAbove, etaDays, etaDaysMember, tier1, pct1, tier2, pct2;
   List<Map<String, String>> footerLinks;
 
   StoreSettings({
     this.appName = AppConfig.appName,
     this.tagline = 'Good finds. Better living.',
-    this.footerText = '© 2026 Zenvora Mart. All rights reserved.',
+    this.footerText = '',
     this.returnPolicy =
         '7-day easy returns and exchange on unused products with original tags and packaging. Refund is processed within 5-7 working days after pickup.',
     this.supportPhone = '',
     this.whatsapp = '',
+    this.logoUrl = '',
     this.accent = 0,
-    this.shippingFee = 49,
+    this.shippingFee = 69,
     this.freeShipAbove = 999,
     this.etaDays = 5,
     this.etaDaysMember = 2,
@@ -276,12 +275,7 @@ class StoreSettings {
     this.tier2 = 1599,
     this.pct2 = 15,
     List<Map<String, String>>? footerLinks,
-  }) : footerLinks = footerLinks ??
-            [
-              {'label': 'Privacy Policy', 'url': 'https://example.com/privacy'},
-              {'label': 'Terms', 'url': 'https://example.com/terms'},
-              {'label': 'Contact', 'url': 'https://example.com/contact'},
-            ];
+  }) : footerLinks = footerLinks ?? <Map<String, String>>[];
 
   Color get accentColor => accentPalette[accent % accentPalette.length].value;
 
@@ -292,6 +286,7 @@ class StoreSettings {
         'returnPolicy': returnPolicy,
         'supportPhone': supportPhone,
         'whatsapp': whatsapp,
+        'logoUrl': logoUrl,
         'accent': accent,
         'shippingFee': shippingFee,
         'freeShipAbove': freeShipAbove,
@@ -313,6 +308,7 @@ class StoreSettings {
       returnPolicy: '${j['returnPolicy'] ?? d.returnPolicy}',
       supportPhone: '${j['supportPhone'] ?? ''}',
       whatsapp: '${j['whatsapp'] ?? ''}',
+      logoUrl: '${j['logoUrl'] ?? ''}',
       accent: _i(j['accent']),
       shippingFee: j['shippingFee'] == null ? d.shippingFee : _i(j['shippingFee']),
       freeShipAbove: j['freeShipAbove'] == null ? d.freeShipAbove : _i(j['freeShipAbove']),

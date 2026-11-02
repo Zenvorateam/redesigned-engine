@@ -85,10 +85,13 @@ class BrandLogo extends StatelessWidget {
           style: TextStyle(color: Colors.white, fontSize: size * .48, fontWeight: FontWeight.w900)),
     );
     Widget? img;
-    if (AppConfig.logoAsset.isNotEmpty) {
+    final remoteLogo = s.settings.logoUrl.trim().isNotEmpty
+        ? s.settings.logoUrl.trim()
+        : AppConfig.logoUrl;
+    if (remoteLogo.isNotEmpty) {
+      img = NetImage(url: remoteLogo, fit: BoxFit.contain, fallback: letter);
+    } else if (AppConfig.logoAsset.isNotEmpty) {
       img = AssetPic(path: AppConfig.logoAsset, fallback: letter);
-    } else if (AppConfig.logoUrl.isNotEmpty) {
-      img = NetImage(url: AppConfig.logoUrl, fit: BoxFit.contain, fallback: letter);
     }
     if (img == null) return letter;
     return SizedBox(width: size, height: size, child: ClipRRect(borderRadius: BorderRadius.circular(size * .22), child: img));

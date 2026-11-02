@@ -12,7 +12,7 @@ class AppConfig {
   // Option 2: assets/logo.png (pubspec me already folder added hai)
   //           -> file rakho `assets/logo/logo.png` aur logoAsset me wahi path daalo
   // Dono khali chhodoge to "Z" letter wala default logo dikhega.
-  static const String logoUrl = 'https://pin.it/3CGOvOBrv';
+  static const String logoUrl = ''; // Use the bundled Zenvora logo by default.
   static const String logoAsset = 'assets/logo/logo.png'; // e.g. 'assets/logo/logo.png'
 
   // ---------------------------------------------------------------- SUPABASE
@@ -27,15 +27,8 @@ class AppConfig {
   static const bool enablePushNotifications = true;
 
   // ---------------------------------------------------------------- RAZORPAY
-  // Razorpay Dashboard > Settings > API Keys  (sirf Key ID, secret app me nahi daalna)
-  // Test key: rzp_test_xxxxx    Live key: rzp_live_xxxxx
-  static const String razorpayKeyId = 'rzp_test_TusCjAN4XOJTkH';
+  // Razorpay Key ID is returned by the trusted Edge Function. Secrets stay server-side.
   static const String razorpayMerchantName = 'Zenvora Mart';
-
-  // ---------------------------------------------------------------- MEMBERSHIP
-  static const int membershipPrice = 29; // Rs per month
-  static const int membershipDays = 28; // kitne din active rahega
-  static const String membershipName = 'Zenvora Plus';
 
   // ---------------------------------------------------------------- ADMIN
   // Ye email se login karne wale log Admin panel dekhenge.
@@ -43,13 +36,9 @@ class AppConfig {
   static const List<String> adminEmails = ['kajgarvarad@gmail.com'
     // 'you@example.com',
   ];
-  static const String adminPin = '1234'; // Admin panel kholne ka PIN - zaroor badlo
-  // Purana phone-wala owner login (optional). Khali chhodo to band rahega.
-  static const String ownerPhone = '7798219295';
 
   // ---------------------------------------------------------------- HELPERS
   static bool get supabaseReady => supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
-  static bool get razorpayReady => razorpayKeyId.isNotEmpty;
   static bool isAdminEmail(String email) =>
       email.isNotEmpty && adminEmails.any((e) => e.trim().toLowerCase() == email.trim().toLowerCase());
 }

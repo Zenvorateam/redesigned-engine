@@ -32,11 +32,6 @@ class HomeScreen extends StatelessWidget {
               ]),
             ),
             IconButton(
-              tooltip: s.dark ? 'Light mode' : 'Dark mode',
-              onPressed: () => s.setDark(!s.dark),
-              icon: Icon(s.dark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
-            ),
-            IconButton(
               tooltip: 'Search',
               onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchScreen())),
               icon: const Icon(Icons.search_rounded),
@@ -125,7 +120,6 @@ class HomeScreen extends StatelessWidget {
             gridDelegate: productGridDelegate(),
           ),
         ),
-      const SliverToBoxAdapter(child: FooterBlock()),
     ]);
   }
 }

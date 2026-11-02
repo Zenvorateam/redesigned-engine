@@ -326,36 +326,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   Text('Cash on Delivery & online payment', style: TextStyle(fontSize: 13)),
                 ]),
                 const SizedBox(height: 16),
-                // membership strip
-                GestureDetector(
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MembershipScreen())),
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), border: Border.all(color: s.isMember ? success : ink, width: 1.2)),
-                    child: Row(children: [
-                      Icon(Icons.workspace_premium_rounded, size: 26, color: s.isMember ? success : const Color(0xFFB45309)),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(
-                            s.isMember ? '${AppConfig.membershipName} is active' : 'Get FREE & faster delivery',
-                            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            s.isMember
-                                ? 'Free delivery on every product · ${s.memberDaysLeft} days left'
-                                : 'Join ${AppConfig.membershipName} for just ₹${AppConfig.membershipPrice}/month — free delivery on every product, delivered in ${s.settings.etaDaysMember} days.',
-                            style: const TextStyle(color: muted, fontSize: 11, height: 1.35),
-                          ),
-                        ]),
-                      ),
-                      const SizedBox(width: 6),
-                      if (!s.isMember) const Text('Join', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
-                      const Icon(Icons.chevron_right, size: 20),
-                    ]),
-                  ),
-                ),
+
               ]),
             ),
 

@@ -29,29 +29,13 @@ jobs:
           channel: stable
           cache: true
 
-      # Generate Android platform
-      - name: Generate Android platform
+      # Generate missing Gradle wrapper files, then restore Zenvora native branding.
+      - name: Generate Android wrapper and restore branding
         run: |
           flutter create . --platforms=android --project-name zenvora --org com.zenvora
+          python3 tool/restore_android_branding.py
           rm -f test/widget_test.dart
           rmdir test 2>/dev/null || true
-
-      # Allow internet (needed for banner/product image URLs, PIN lookup) and call/WhatsApp links
-      - name: Patch Android manifest
-        run: |
-          python3 - <<'PY'
-          p = 'android/app/src/main/AndroidManifest.xml'
-          s = open(p).read()
-          add = '''<uses-permission android:name="android.permission.INTERNET"/>
-              <queries>
-                  <intent><action android:name="android.intent.action.VIEW"/><data android:scheme="https"/></intent>
-                  <intent><action android:name="android.intent.action.DIAL"/><data android:scheme="tel"/></intent>
-              </queries>
-              '''
-          if 'android.permission.INTERNET' not in s:
-              s = s.replace('<application', add + '<application', 1)
-          open(p, 'w').write(s)
-          PY
 
       # Install dependencies
       - name: Get Flutter dependencies
