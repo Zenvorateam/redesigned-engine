@@ -175,6 +175,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   late final TextEditingController name, email, mobile, addr, pin, town;
   bool initialized = false;
   bool busy = false;
+  String? _checkoutRequestId;
   String payment = 'Cash on Delivery';
 
   @override
